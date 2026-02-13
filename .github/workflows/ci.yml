@@ -79,6 +79,9 @@ jobs:
         env:
           NODE_ENV: production
 
+      - name: Debug - check .next/ exists
+        run: ls -la blueocean_front/.next/ || echo "ERROR: .next/ not found"
+
       - name: Remove Next.js build cache
         run: rm -rf blueocean_front/.next/cache/
 
