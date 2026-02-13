@@ -247,7 +247,11 @@ jobs:
       - name: Install Playwright browsers
         working-directory: blueocean_auto_test
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install chromium --with-deps
+        run: npx playwright install chromium
+
+      - name: Install Playwright system dependencies
+        working-directory: blueocean_auto_test
+        run: npx playwright install-deps chromium
 
       - name: Create Playwright auth directory
         run: mkdir -p blueocean_auto_test/playwright/.auth
