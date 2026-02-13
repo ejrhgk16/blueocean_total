@@ -19,7 +19,7 @@ class LandingApi {
    * @param {string} pageCode
    */
   async getContentList(storeCode, pageCode) {
-    return this.request.get(`${BASE_URL}/landing/content/list`, {
+    return this.request.get(`${BASE_URL}/landing/content/list233`, {
       params: { store_code: storeCode, page_code: pageCode },
     });
   }
