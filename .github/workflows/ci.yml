@@ -79,6 +79,13 @@ jobs:
         env:
           NODE_ENV: production
 
+      - name: Upload frontend dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: blueocean_front/.next/
+          retention-days: 1
+
 
   # ──────────────────────────────────────────────────────────────────────────
   # JOB 3: Playwright E2E (백엔드·프론트 CI 통과 후 실행)
@@ -153,9 +160,32 @@ jobs:
           name: backend-dist
           path: blueocean_back/dist/
 
+      # ── Frontend ───────────────────────────────────────────────────────────
+      - name: Write frontend dev env file
+        run: printf '%s' "$FRONT_DEV_ENV" > blueocean_front/.env.production
+        shell: bash
+        env:
+          FRONT_DEV_ENV: ${{ secrets.FRONT_DEV_ENV }}
+
+      - name: Install frontend dependencies (prod only)
+        working-directory: blueocean_front
+        run: npm ci --omit=dev
+
+      - name: Download frontend dist
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: blueocean_front/.next/
+
+      - name: Start frontend server
+        working-directory: blueocean_front
+        run: npm run start > /tmp/frontend.log 2>&1 &
+        env:
+          NODE_ENV: production
+
       - name: Start backend server
         working-directory: blueocean_back
-        run: node dist/main &
+        run: node dist/main > /tmp/backend.log 2>&1 &
         env:
           NODE_ENV: dev
 
@@ -165,10 +195,28 @@ jobs:
           for i in $(seq 1 30); do
             if curl -sf http://localhost:3000/test/test > /dev/null 2>&1; then
               echo "백엔드 ready"
-              break
+              exit 0
             fi
             if [ $i -eq 30 ]; then
-              echo "백엔드 시작 실패"
+              echo "백엔드 시작 실패 — 로그:"
+              cat /tmp/backend.log
+              exit 1
+            fi
+            echo "대기 중... ($i/30)"
+            sleep 2
+          done
+
+      - name: Wait for frontend to be ready
+        run: |
+          echo "프론트엔드(port 3300) ready 대기 중..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3300 > /dev/null 2>&1; then
+              echo "프론트엔드 ready"
+              exit 0
+            fi
+            if [ $i -eq 30 ]; then
+              echo "프론트엔드 시작 실패 — 로그:"
+              cat /tmp/frontend.log
               exit 1
             fi
             echo "대기 중... ($i/30)"
