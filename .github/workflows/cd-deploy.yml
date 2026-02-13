@@ -48,7 +48,7 @@ jobs:
 
             echo "=== PM2 reload ==="
             cd ..
-            pm2 reload ecosystem.config.js --update-env
+            pm2 reload ../ecosystem.config.js --update-env
 
             echo "=== 배포 완료 ==="
             pm2 status
