@@ -19,6 +19,7 @@ export async function GET(req : NextRequest) {
 
     cookies().delete('refresh_token')
     cookies().delete('access_token')
+    cookies().delete('expire_time')
 
   }
 

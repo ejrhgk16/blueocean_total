@@ -19,11 +19,13 @@ export async function POST(req : NextRequest) {
 
   const successCallback = function(result:Record<string, any>){
 
+    const isSecure = process.env.COOKIE_SECURE !== 'false' && process.env.NODE_ENV === 'production'
+
     cookies().set({
       name:'access_token',
       value: result.access_token,
       httpOnly : true,
-      secure : process.env.NODE_ENV === 'production',
+      secure : isSecure,
       maxAge: 24 * 60 * 60,
       path : '/',
       sameSite  : 'strict'
@@ -33,18 +35,18 @@ export async function POST(req : NextRequest) {
       name:'refresh_token',
       value: result.refresh_token,
       httpOnly : true,
-      secure : process.env.NODE_ENV === 'production',
+      secure : isSecure,
       maxAge: 24 * 60 * 60,
       path : '/',
       sameSite  : 'strict'
     })
 
-    
+
     cookies().set({
       name:'expire_time',
       value: result.expire_time,
       httpOnly : false,
-      secure : process.env.NODE_ENV === 'production',
+      secure : isSecure,
       maxAge: 24 * 60 * 60,
       path : '/',
       sameSite  : 'strict'

@@ -135,7 +135,7 @@ async function boaPost(targetUrl : string, body :any = '',cookiesArr:RequestCook
     }finally {
   
         if (res2.redirected) {
-            if(res2.url.include("/auth/signout")){
+            if(res2.url.includes("/auth/signout")){
                 alert("로그인 만료되었습니다 재로그인해주세요")
             }
 
@@ -200,7 +200,7 @@ async function boaPost_formData(targetUrl : string, body :any = '',cookiesArr:Re
   
         if (res2.redirected) {
 
-            if(res2.url.include("/auth/signout")){
+            if(res2.url.includes("/auth/signout")){
                 alert("로그인 만료되었습니다 재로그인해주세요")
             }
 
