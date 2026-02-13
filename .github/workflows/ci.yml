@@ -83,7 +83,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: frontend-dist
-          path: blueocean_front/.next/
+          path: |
+            blueocean_front/.next/
+            !blueocean_front/.next/cache/
           retention-days: 1
 
 
