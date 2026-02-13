@@ -63,6 +63,12 @@ jobs:
           cache: 'npm'
           cache-dependency-path: blueocean_front/package-lock.json
 
+      - name: Write frontend dev env file
+        run: printf '%s' "$FRONT_DEV_ENV" > blueocean_front/.env.production
+        shell: bash
+        env:
+          FRONT_DEV_ENV: ${{ secrets.FRONT_DEV_ENV }}
+
       - name: Install dependencies
         working-directory: blueocean_front
         run: npm ci
@@ -78,7 +84,7 @@ jobs:
   # JOB 3: Playwright E2E (백엔드·프론트 CI 통과 후 실행)
   # ──────────────────────────────────────────────────────────────────────────
   playwright-e2e:
-    name: Playwright Lighthouse E2E
+    name: Playwright E2E
     runs-on: ubuntu-latest
     needs: [backend-ci, frontend-ci]
     timeout-minutes: 30
