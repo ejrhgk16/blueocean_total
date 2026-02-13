@@ -1,0 +1,83 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# 목적: MySQL Docker 이미지를 빌드해서 ghcr.io(GitHub Container Registry)에 푸시
+#
+# 언제 실행되나:
+#   1. docker/mysql/ 폴더 변경 후 master에 push → 자동 실행
+#      (SQL 스키마/시드 수정, Dockerfile 수정, MySQL 설정 변경 등)
+#   2. GitHub Actions 탭에서 "Run workflow" 버튼 → 수동 실행
+#      (처음 이미지를 만들 때, 또는 강제로 다시 빌드할 때)
+#
+# 결과물:
+#   ghcr.io/{owner}/blueocean-mysql:latest  ← ci.yml의 playwright-e2e 잡에서 사용
+#   ghcr.io/{owner}/blueocean-mysql:sha-xxxx ← 커밋별 버전 태그 (롤백용)
+# ──────────────────────────────────────────────────────────────────────────────
+name: Docker - Build & Push MySQL Image
+
+on:
+  push:
+    branches: [master]
+    paths:
+      # docker/mysql/ 하위 파일이 바뀔 때만 실행 (불필요한 이미지 재빌드 방지)
+      - 'docker/mysql/**'
+      # 이 워크플로 파일 자체가 바뀔 때도 실행
+      - '.github/workflows/docker-db-build.yml'
+  # 수동 트리거: SQL 파일을 처음 채워넣은 뒤 첫 빌드할 때 사용
+  workflow_dispatch:
+
+env:
+  # ghcr.io = GitHub Container Registry 주소
+  REGISTRY: ghcr.io
+  # 이미지 이름: ghcr.io/{레포소유자}/blueocean-mysql
+  # github.repository_owner → 자동으로 GitHub 계정명으로 채워짐
+  IMAGE_NAME: ${{ github.repository_owner }}/blueocean-mysql
+
+jobs:
+  build-and-push:
+    name: Build and Push MySQL Docker Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read   # 코드 체크아웃 권한
+      packages: write  # ghcr.io 패키지(이미지) 푸시 권한
+
+    steps:
+      # 1. 레포 코드를 GitHub Actions 가상머신으로 내려받음
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. ghcr.io에 로그인
+      #    - username: 워크플로를 트리거한 GitHub 계정 (보통 push한 사람)
+      #    - password: GitHub이 자동으로 발급하는 임시 토큰 (별도 설정 불필요)
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 3. 이미지 태그·라벨 자동 생성
+      #    - latest  : master 브랜치 push일 때 붙음 → ci.yml에서 이 태그를 pull
+      #    - sha-xxxx: 커밋 SHA 기반 태그 → 특정 커밋 시점으로 롤백할 때 사용
+      #    id: meta → 다음 단계에서 steps.meta.outputs.tags 로 참조
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-
+
+      # 4. 이미지 빌드 & ghcr.io 푸시
+      #    - context: ./docker/mysql  → 이 폴더의 Dockerfile을 사용
+      #    - push: true               → 빌드 후 즉시 레지스트리에 업로드
+      #    - cache-from/to            → GitHub Actions 캐시 재사용 (빌드 속도 향상)
+      #      이전에 빌드한 레이어가 캐시에 있으면 재다운로드 없이 재사용
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./docker/mysql
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -1,0 +1,204 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # JOB 1: 백엔드 Lint + Build
+  # ──────────────────────────────────────────────────────────────────────────
+  backend-ci:
+    name: Backend — Lint & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: blueocean_back/package-lock.json
+
+      - name: Install dependencies
+        working-directory: blueocean_back
+        run: npm ci
+
+      - name: Lint (check only)
+        working-directory: blueocean_back
+        run: npm run lint:check
+
+      - name: Build
+        working-directory: blueocean_back
+        run: npm run build
+        env:
+          NODE_ENV: dev
+          NODE_OPTIONS: '--max-old-space-size=2096'
+
+      # playwright-e2e 잡이 재사용할 빌드 결과물 업로드
+      - name: Upload backend dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-dist
+          path: blueocean_back/dist/
+          retention-days: 1
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # JOB 2: 프론트엔드 Lint + Build
+  # ──────────────────────────────────────────────────────────────────────────
+  frontend-ci:
+    name: Frontend — Lint & Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: blueocean_front/package-lock.json
+
+      - name: Install dependencies
+        working-directory: blueocean_front
+        run: npm ci
+
+      - name: Lint
+        working-directory: blueocean_front
+        run: npm run lint
+
+      - name: Build
+        working-directory: blueocean_front
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # JOB 3: Playwright E2E (백엔드·프론트 CI 통과 후 실행)
+  # ──────────────────────────────────────────────────────────────────────────
+  playwright-e2e:
+    name: Playwright Lighthouse E2E
+    runs-on: ubuntu-latest
+    needs: [backend-ci, frontend-ci]
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # ── MySQL ──────────────────────────────────────────────────────────────
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Start MySQL container
+        run: |
+          docker run -d \
+            --name blueocean-mysql \
+            -e MYSQL_ROOT_PASSWORD=rootpassword \
+            -e MYSQL_DATABASE=blueocean \
+            -e MYSQL_USER=BLUEOCEANUSER \
+            -e MYSQL_PASSWORD=BLUEOCEAN \
+            -p 3306:3306 \
+            ghcr.io/${{ github.repository_owner }}/blueocean-mysql:latest
+
+      - name: Wait for MySQL to be ready
+        run: |
+          echo "MySQL 컨테이너 ready 대기 중..."
+          for i in $(seq 1 40); do
+            if docker exec blueocean-mysql mysqladmin ping -u root -prootpassword --silent 2>/dev/null; then
+              echo "MySQL ready (${i}번째 시도)"
+              break
+            fi
+            if [ $i -eq 40 ]; then
+              echo "MySQL 시작 실패"
+              docker logs blueocean-mysql
+              exit 1
+            fi
+            echo "대기 중... ($i/40)"
+            sleep 3
+          done
+
+      # ── Backend ────────────────────────────────────────────────────────────
+      - name: Write backend dev env file
+        run: |
+          mkdir -p blueocean_back/src/config
+          printf '%s' "$BACK_DEV_ENV" > blueocean_back/src/config/.dev.env
+        shell: bash
+        env:
+          BACK_DEV_ENV: ${{ secrets.BACK_DEV_ENV }}
+
+      - name: Install backend dependencies (prod only)
+        working-directory: blueocean_back
+        run: npm ci --omit=dev
+
+      - name: Download backend dist
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-dist
+          path: blueocean_back/dist/
+
+      - name: Start backend server
+        working-directory: blueocean_back
+        run: node dist/main &
+        env:
+          NODE_ENV: dev
+
+      - name: Wait for backend to be ready
+        run: |
+          echo "백엔드(port 3000) ready 대기 중..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/test/test > /dev/null 2>&1; then
+              echo "백엔드 ready"
+              break
+            fi
+            if [ $i -eq 30 ]; then
+              echo "백엔드 시작 실패"
+              exit 1
+            fi
+            echo "대기 중... ($i/30)"
+            sleep 2
+          done
+
+      # ── Playwright ─────────────────────────────────────────────────────────
+      - name: Install Playwright dependencies
+        working-directory: blueocean_auto_test
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: blueocean_auto_test
+        run: npx playwright install chromium --with-deps
+
+      - name: Create Playwright auth directory
+        run: mkdir -p blueocean_auto_test/playwright/.auth
+
+      - name: Run Playwright API tests
+        working-directory: blueocean_auto_test
+        run: npx playwright test tests/landing-api.spec.js
+        env:
+          CI: true
+
+      - name: Upload Playwright HTML report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: blueocean_auto_test/playwright-report/
+          retention-days: 14

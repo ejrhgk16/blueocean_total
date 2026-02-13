@@ -1,0 +1,53 @@
+name: CD - Deploy to EC2
+
+on:
+  # CI 워크플로들이 master에서 완료된 후 트리거
+  workflow_run:
+    workflows:
+      - "CI"
+    types:
+      - completed
+    branches:
+      - master
+  # 수동 배포
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: SSH Deploy to EC2
+    runs-on: ubuntu-latest
+    # workflow_run으로 트리거된 경우 성공한 경우에만 배포
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            echo "=== 최신 코드 pull ==="
+            git pull origin master
+
+            echo "=== 백엔드 의존성 설치 & 빌드 ==="
+            cd blueocean_back
+            npm ci --omit=dev
+            npm run build
+
+            echo "=== 프론트엔드 의존성 설치 & 빌드 ==="
+            cd ../blueocean_front
+            npm ci
+            npm run build
+
+            echo "=== PM2 reload ==="
+            cd ..
+            pm2 reload ecosystem.config.js --update-env
+
+            echo "=== 배포 완료 ==="
+            pm2 status

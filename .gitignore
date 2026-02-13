@@ -2,6 +2,9 @@
 # 민감한 환경변수
 blueocean_back/src/config/
 
+# Docker (SQL 파일 준비 전까지 제외)
+docker/
+docker-compose.dev.yml
 # Windows artifacts
 nul
 
