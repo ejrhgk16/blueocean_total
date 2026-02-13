@@ -3,7 +3,7 @@
 blueocean_back/src/config/
 
 # Docker (SQL 파일 준비 전까지 제외)
-docker/
+# docker/
 docker-compose.dev.yml
 # Windows artifacts
 nul

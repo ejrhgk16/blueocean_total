@@ -1,0 +1,14 @@
+[mysqld]
+# 한글 지원
+character-set-server=utf8mb4
+collation-server=utf8mb4_unicode_ci
+
+# CI 성능 최적화 (프로덕션에서는 사용 금지)
+skip-log-bin
+innodb_buffer_pool_size = 64M
+innodb_log_file_size = 16M
+innodb_flush_log_at_trx_commit = 0
+sync_binlog = 0
+
+[client]
+default-character-set=utf8mb4
