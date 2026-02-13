@@ -200,7 +200,7 @@ jobs:
         run: |
           echo "백엔드(port 3000) ready 대기 중..."
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:3000/test/test > /dev/null 2>&1; then
+            if curl -sf http://localhost:3000/ > /dev/null 2>&1; then
               echo "백엔드 ready"
               exit 0
             fi
