@@ -1,0 +1,16 @@
+
+# 민감한 환경변수
+blueocean_back/src/config/
+
+# Windows artifacts
+nul
+
+# Playwright
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
+/lighthouse-reports/
+/관련파일/
