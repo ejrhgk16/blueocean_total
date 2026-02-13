@@ -312,7 +312,7 @@ export class BoaController {
 
     const result = await this.boaService.getBoaPageListService()
 
-    return result
+    return result//
 
   }
 
