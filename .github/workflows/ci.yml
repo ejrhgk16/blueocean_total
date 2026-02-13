@@ -64,7 +64,7 @@ jobs:
           cache-dependency-path: blueocean_front/package-lock.json
 
       - name: Write frontend dev env file
-        run: printf '%s' "$FRONT_DEV_ENV" > blueocean_front/.env.production
+        run: printf '%s' "$FRONT_DEV_ENV" > blueocean_front/.env.local
         shell: bash
         env:
           FRONT_DEV_ENV: ${{ secrets.FRONT_DEV_ENV }}
@@ -76,8 +76,6 @@ jobs:
       - name: Build
         working-directory: blueocean_front
         run: npm run build
-        env:
-          NODE_ENV: production
 
       - name: Debug - check .next/ exists
         run: ls -la blueocean_front/.next/ || echo 'ERROR: .next/ not found'
@@ -168,7 +166,7 @@ jobs:
 
       # ── Frontend ───────────────────────────────────────────────────────────
       - name: Write frontend dev env file
-        run: printf '%s' "$FRONT_DEV_ENV" > blueocean_front/.env.production
+        run: printf '%s' "$FRONT_DEV_ENV" > blueocean_front/.env.local
         shell: bash
         env:
           FRONT_DEV_ENV: ${{ secrets.FRONT_DEV_ENV }}
