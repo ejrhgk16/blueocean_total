@@ -147,6 +147,9 @@ jobs:
             echo "대기 중... ($i/40)"
             sleep 3
           done
+          echo "❌ 백엔드 시작 실패! 로그를 출력합니다:"
+                    cat /tmp/backend.log  # 이 줄이 범인을 알려줄 겁니다.
+                    exit 1
 
       # ── Backend ────────────────────────────────────────────────────────────
       - name: Write backend dev env file
