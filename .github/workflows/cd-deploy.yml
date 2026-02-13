@@ -37,13 +37,14 @@ jobs:
 
             echo "=== 백엔드 의존성 설치 & 빌드 ==="
             cd blueocean_back
-            npm ci --omit=dev
+            npm ci
             npm run build
+            npm prune --production
 
             echo "=== 프론트엔드 의존성 설치 & 빌드 ==="
             cd ../blueocean_front
             npm ci
-            npm run build
+            NODE_ENV=production npm run build
 
             echo "=== PM2 reload ==="
             cd ..
