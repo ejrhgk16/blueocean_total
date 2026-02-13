@@ -125,7 +125,7 @@ jobs:
           docker run -d \
             --name blueocean-mysql \
             -e MYSQL_ROOT_PASSWORD=rootpassword \
-            -e MYSQL_DATABASE=blueocean \
+            -e MYSQL_DATABASE=BLUEOCEANDB \
             -e MYSQL_USER=BLUEOCEANUSER \
             -e MYSQL_PASSWORD=BLUEOCEAN \
             -p 3306:3306 \
