@@ -15,8 +15,9 @@ jobs:
     name: Detect Changes
     runs-on: ubuntu-latest
     outputs:
-      backend: ${{ steps.filter.outputs.backend }}
-      frontend: ${{ steps.filter.outputs.frontend }}
+      # 코드가 변경됐거나 캐시가 없으면 빌드 필요
+      run-backend: ${{ steps.filter.outputs.backend == 'true' || steps.backend-cache-check.outputs.cache-hit != 'true' }}
+      run-frontend: ${{ steps.filter.outputs.frontend == 'true' || steps.frontend-cache-check.outputs.cache-hit != 'true' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -31,15 +32,32 @@ jobs:
             frontend:
               - 'blueocean_front/**'
 
+      # 캐시 존재 여부만 확인 (다운로드 없이 lookup만)
+      - name: Check backend cache exists
+        id: backend-cache-check
+        uses: actions/cache/restore@v4
+        with:
+          path: blueocean_back/dist/
+          key: backend-dist-${{ hashFiles('blueocean_back/src/**', 'blueocean_back/package-lock.json', 'blueocean_back/tsconfig.json', 'blueocean_back/nest-cli.json') }}
+          lookup-only: true
+
+      - name: Check frontend cache exists
+        id: frontend-cache-check
+        uses: actions/cache/restore@v4
+        with:
+          path: blueocean_front/.next/
+          key: frontend-dist-${{ hashFiles('blueocean_front/src/**', 'blueocean_front/package-lock.json', 'blueocean_front/tsconfig.json', 'blueocean_front/next.config.*') }}
+          lookup-only: true
+
   # ──────────────────────────────────────────────────────────────────────────
-  # JOB 1: 백엔드 Build (백엔드 소스 변경 시에만 실행)
+  # JOB 1: 백엔드 Build (소스 변경 또는 캐시 없을 때 실행)
   # ──────────────────────────────────────────────────────────────────────────
   backend-ci:
     name: Backend — Build
     runs-on: ubuntu-latest
     needs: detect-changes
     if: >
-      needs.detect-changes.outputs.backend == 'true' ||
+      needs.detect-changes.outputs.run-backend == 'true' ||
       github.event_name == 'workflow_dispatch'
 
     steps:
@@ -81,14 +99,14 @@ jobs:
           retention-days: 1
 
   # ──────────────────────────────────────────────────────────────────────────
-  # JOB 2: 프론트엔드 Build (프론트 소스 변경 시에만 실행)
+  # JOB 2: 프론트엔드 Build (소스 변경 또는 캐시 없을 때 실행)
   # ──────────────────────────────────────────────────────────────────────────
   frontend-ci:
     name: Frontend — Build
     runs-on: ubuntu-latest
     needs: detect-changes
     if: >
-      needs.detect-changes.outputs.frontend == 'true' ||
+      needs.detect-changes.outputs.run-frontend == 'true' ||
       github.event_name == 'workflow_dispatch'
 
     steps:
