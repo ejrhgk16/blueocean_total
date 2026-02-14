@@ -33,21 +33,37 @@ jobs:
             cd ${{ secrets.DEPLOY_PATH }}
 
             echo "=== 최신 코드 pull ==="
+            BEFORE=$(git rev-parse HEAD)
             git pull origin master
+            AFTER=$(git rev-parse HEAD)
 
-            echo "=== 백엔드 의존성 설치 & 빌드 ==="
-            cd blueocean_back
-            npm ci
-            npm run build
-            npm prune --production
+            # 변경된 파일 목록으로 빌드 대상 판별
+            CHANGED=$(git diff --name-only "$BEFORE" "$AFTER")
+            BACK_CHANGED=$(echo "$CHANGED" | grep -c '^blueocean_back/' || true)
+            FRONT_CHANGED=$(echo "$CHANGED" | grep -c '^blueocean_front/' || true)
 
-            echo "=== 프론트엔드 의존성 설치 & 빌드 ==="
-            cd ../blueocean_front
-            npm ci
-            NODE_ENV=production npm run build
+            if [ "$BACK_CHANGED" -gt 0 ]; then
+              echo "=== 백엔드 변경 감지 — 의존성 설치 & 빌드 ==="
+              cd blueocean_back
+              npm ci
+              npm run build
+              npm prune --production
+              cd ..
+            else
+              echo "::notice::백엔드 변경 없음 — 빌드 건너뜀"
+            fi
+
+            if [ "$FRONT_CHANGED" -gt 0 ]; then
+              echo "=== 프론트엔드 변경 감지 — 의존성 설치 & 빌드 ==="
+              cd blueocean_front
+              npm ci
+              NODE_ENV=production npm run build
+              cd ..
+            else
+              echo "::notice::프론트엔드 변경 없음 — 빌드 건너뜀"
+            fi
 
             echo "=== PM2 reload ==="
-            cd ..
             pm2 reload ../ecosystem.config.js --update-env
 
             echo "=== 배포 완료 ==="
