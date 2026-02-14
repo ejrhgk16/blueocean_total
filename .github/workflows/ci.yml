@@ -9,26 +9,44 @@ on:
 
 jobs:
   # ──────────────────────────────────────────────────────────────────────────
-  # JOB 1: 백엔드 Build
+  # JOB 0: 변경 감지 — git diff로 어떤 폴더가 바뀌었는지 판별
+  # ──────────────────────────────────────────────────────────────────────────
+  detect-changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Detect changed paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'blueocean_back/**'
+            frontend:
+              - 'blueocean_front/**'
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # JOB 1: 백엔드 Build (백엔드 소스 변경 시에만 실행)
   # ──────────────────────────────────────────────────────────────────────────
   backend-ci:
     name: Backend — Build
     runs-on: ubuntu-latest
+    needs: detect-changes
+    if: >
+      needs.detect-changes.outputs.backend == 'true' ||
+      github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 소스 해시 기반 빌드 캐시 — 백엔드 소스가 안 바뀌면 빌드 건너뜀
-      - name: Cache backend dist
-        id: backend-cache
-        uses: actions/cache@v4
-        with:
-          path: blueocean_back/dist/
-          key: backend-dist-${{ hashFiles('blueocean_back/src/**', 'blueocean_back/package-lock.json', 'blueocean_back/tsconfig.json', 'blueocean_back/nest-cli.json') }}
-
       - name: Set up Node.js
-        if: steps.backend-cache.outputs.cache-hit != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -36,19 +54,25 @@ jobs:
           cache-dependency-path: blueocean_back/package-lock.json
 
       - name: Install dependencies
-        if: steps.backend-cache.outputs.cache-hit != 'true'
         working-directory: blueocean_back
         run: npm ci
 
       - name: Build
-        if: steps.backend-cache.outputs.cache-hit != 'true'
         working-directory: blueocean_back
-        run: npm run build
+        run: |
+          echo "::notice::백엔드 소스 변경 감지 — 새로 빌드 실행"
+          npm run build
         env:
           NODE_ENV: dev
           NODE_OPTIONS: '--max-old-space-size=2096'
 
-      # playwright-e2e 잡이 재사용할 빌드 결과물 업로드
+      # 빌드 결과물을 캐시에 저장 (E2E에서 cache/restore로 재사용)
+      - name: Save backend dist to cache
+        uses: actions/cache/save@v4
+        with:
+          path: blueocean_back/dist/
+          key: backend-dist-${{ hashFiles('blueocean_back/src/**', 'blueocean_back/package-lock.json', 'blueocean_back/tsconfig.json', 'blueocean_back/nest-cli.json') }}
+
       - name: Upload backend dist
         uses: actions/upload-artifact@v4
         with:
@@ -57,26 +81,21 @@ jobs:
           retention-days: 1
 
   # ──────────────────────────────────────────────────────────────────────────
-  # JOB 2: 프론트엔드 Build
+  # JOB 2: 프론트엔드 Build (프론트 소스 변경 시에만 실행)
   # ──────────────────────────────────────────────────────────────────────────
   frontend-ci:
     name: Frontend — Build
     runs-on: ubuntu-latest
+    needs: detect-changes
+    if: >
+      needs.detect-changes.outputs.frontend == 'true' ||
+      github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 소스 해시 기반 빌드 캐시 — 프론트 소스가 안 바뀌면 빌드 건너뜀
-      - name: Cache frontend dist
-        id: frontend-cache
-        uses: actions/cache@v4
-        with:
-          path: blueocean_front/.next/
-          key: frontend-dist-${{ hashFiles('blueocean_front/src/**', 'blueocean_front/package-lock.json', 'blueocean_front/tsconfig.json', 'blueocean_front/next.config.*') }}
-
       - name: Set up Node.js
-        if: steps.frontend-cache.outputs.cache-hit != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -84,24 +103,30 @@ jobs:
           cache-dependency-path: blueocean_front/package-lock.json
 
       - name: Write frontend dev env file
-        if: steps.frontend-cache.outputs.cache-hit != 'true'
         run: printf '%s' "$FRONT_DEV_ENV" > blueocean_front/.env.local
         shell: bash
         env:
           FRONT_DEV_ENV: ${{ secrets.FRONT_DEV_ENV }}
 
       - name: Install dependencies
-        if: steps.frontend-cache.outputs.cache-hit != 'true'
         working-directory: blueocean_front
         run: npm ci
 
       - name: Build
-        if: steps.frontend-cache.outputs.cache-hit != 'true'
         working-directory: blueocean_front
-        run: npm run build
+        run: |
+          echo "::notice::프론트엔드 소스 변경 감지 — 새로 빌드 실행"
+          npm run build
 
       - name: Remove Next.js build cache
         run: rm -rf blueocean_front/.next/cache/
+
+      # 빌드 결과물을 캐시에 저장 (E2E에서 cache/restore로 재사용)
+      - name: Save frontend dist to cache
+        uses: actions/cache/save@v4
+        with:
+          path: blueocean_front/.next/
+          key: frontend-dist-${{ hashFiles('blueocean_front/src/**', 'blueocean_front/package-lock.json', 'blueocean_front/tsconfig.json', 'blueocean_front/next.config.*') }}
 
       - name: Upload frontend dist
         uses: actions/upload-artifact@v4
@@ -114,12 +139,18 @@ jobs:
 
 
   # ──────────────────────────────────────────────────────────────────────────
-  # JOB 3: Playwright E2E (백엔드·프론트 CI 통과 후 실행)
+  # JOB 3: Playwright E2E (항상 실행 — 빌드 결과물은 캐시에서 복원)
   # ──────────────────────────────────────────────────────────────────────────
   playwright-e2e:
     name: Playwright E2E
     runs-on: ubuntu-latest
-    needs: [backend-ci, frontend-ci]
+    needs: [detect-changes, backend-ci, frontend-ci]
+    # always()로 skipped 의존성도 통과시키되, 실패한 경우는 제외
+    if: >
+      always() &&
+      needs.detect-changes.result == 'success' &&
+      needs.backend-ci.result != 'failure' &&
+      needs.frontend-ci.result != 'failure'
     timeout-minutes: 30
 
     steps:
@@ -176,7 +207,7 @@ jobs:
             sleep 3
           done
 
-      # ── Backend ────────────────────────────────────────────────────────────
+      # ── Backend (캐시에서 빌드 결과물 복원) ──────────────────────────────
       - name: Write backend dev env file
         run: |
           mkdir -p blueocean_back/src/config
@@ -189,13 +220,14 @@ jobs:
         working-directory: blueocean_back
         run: npm ci --omit=dev
 
-      - name: Download backend dist
-        uses: actions/download-artifact@v4
+      - name: Restore backend dist from cache
+        uses: actions/cache/restore@v4
         with:
-          name: backend-dist
           path: blueocean_back/dist/
+          key: backend-dist-${{ hashFiles('blueocean_back/src/**', 'blueocean_back/package-lock.json', 'blueocean_back/tsconfig.json', 'blueocean_back/nest-cli.json') }}
+          fail-on-cache-miss: true
 
-      # ── Frontend ───────────────────────────────────────────────────────────
+      # ── Frontend (캐시에서 빌드 결과물 복원) ─────────────────────────────
       - name: Write frontend dev env file
         run: printf '%s' "$FRONT_DEV_ENV" > blueocean_front/.env.local
         shell: bash
@@ -206,11 +238,12 @@ jobs:
         working-directory: blueocean_front
         run: npm ci --omit=dev
 
-      - name: Download frontend dist
-        uses: actions/download-artifact@v4
+      - name: Restore frontend dist from cache
+        uses: actions/cache/restore@v4
         with:
-          name: frontend-dist
           path: blueocean_front/.next/
+          key: frontend-dist-${{ hashFiles('blueocean_front/src/**', 'blueocean_front/package-lock.json', 'blueocean_front/tsconfig.json', 'blueocean_front/next.config.*') }}
+          fail-on-cache-miss: true
 
       - name: Start frontend server
         working-directory: blueocean_front
