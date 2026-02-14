@@ -301,7 +301,7 @@ export class BoaController {
     //const param = {role_name : 'master'}
     const result = await this.boaService.addAccountService(body)
 
-    return result
+    return result//
 
   }
 

@@ -16,7 +16,7 @@ export async function GET(req : NextRequest, res: NextResponse) {
   const successCallback = function(result:Record<string, any>){
 
 
-  }
+  }//
 
   const nextRes= await fetchToBackServer.boaGet(targetUrl, req, successCallback);
 
