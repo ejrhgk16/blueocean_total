@@ -19,7 +19,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 소스 해시 기반 빌드 캐시 — 백엔드 소스가 안 바뀌면 빌드 건너뜀
+      - name: Cache backend dist
+        id: backend-cache
+        uses: actions/cache@v4
+        with:
+          path: blueocean_back/dist/
+          key: backend-dist-${{ hashFiles('blueocean_back/src/**', 'blueocean_back/package-lock.json', 'blueocean_back/tsconfig.json', 'blueocean_back/nest-cli.json') }}
+
       - name: Set up Node.js
+        if: steps.backend-cache.outputs.cache-hit != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -27,10 +36,12 @@ jobs:
           cache-dependency-path: blueocean_back/package-lock.json
 
       - name: Install dependencies
+        if: steps.backend-cache.outputs.cache-hit != 'true'
         working-directory: blueocean_back
         run: npm ci
 
       - name: Build
+        if: steps.backend-cache.outputs.cache-hit != 'true'
         working-directory: blueocean_back
         run: npm run build
         env:
@@ -56,7 +67,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # 소스 해시 기반 빌드 캐시 — 프론트 소스가 안 바뀌면 빌드 건너뜀
+      - name: Cache frontend dist
+        id: frontend-cache
+        uses: actions/cache@v4
+        with:
+          path: blueocean_front/.next/
+          key: frontend-dist-${{ hashFiles('blueocean_front/src/**', 'blueocean_front/package-lock.json', 'blueocean_front/tsconfig.json', 'blueocean_front/next.config.*') }}
+
       - name: Set up Node.js
+        if: steps.frontend-cache.outputs.cache-hit != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -64,22 +84,21 @@ jobs:
           cache-dependency-path: blueocean_front/package-lock.json
 
       - name: Write frontend dev env file
+        if: steps.frontend-cache.outputs.cache-hit != 'true'
         run: printf '%s' "$FRONT_DEV_ENV" > blueocean_front/.env.local
         shell: bash
         env:
           FRONT_DEV_ENV: ${{ secrets.FRONT_DEV_ENV }}
 
       - name: Install dependencies
+        if: steps.frontend-cache.outputs.cache-hit != 'true'
         working-directory: blueocean_front
         run: npm ci
 
       - name: Build
+        if: steps.frontend-cache.outputs.cache-hit != 'true'
         working-directory: blueocean_front
         run: npm run build
-
-      - name: Debug - check .next/ exists
-        run: |
-          ls -la blueocean_front/.next/ || echo 'ERROR: .next/ not found'
 
       - name: Remove Next.js build cache
         run: rm -rf blueocean_front/.next/cache/
